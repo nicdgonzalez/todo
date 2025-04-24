@@ -1,0 +1,21 @@
+[project]
+name = "todo"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "clap@git+https://github.com/nicdgonzalez/clap",
+    "colorize@git+https://github.com/nicdgonzalez/colorize",
+    "psycopg>=3.2.6",
+]
+
+[project.scripts]
+"todo" = "todo.__main__:main"
+
+[tool.setuptools.package-data]
+"todo" = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 79
