@@ -1,11 +1,13 @@
 import datetime as dt
 import enum
+import json
 import pathlib
 import sqlite3
 from typing import Annotated, Literal
 
 import clap
 from colorize import Colorize
+from dateutil.tz import tzlocal
 
 __all__ = ("app",)
 
@@ -128,24 +130,34 @@ class Task:
         self.task = task
         self.priority = Priority.from_int(priority)
         self.status = Status.from_int(status)
-        self.created_at = dt.datetime.fromtimestamp(created_at)
-        self.updated_at = dt.datetime.fromtimestamp(updated_at)
+        self.created_at = dt.datetime.fromtimestamp(created_at, tz=tzlocal())
+        self.updated_at = dt.datetime.fromtimestamp(updated_at, tz=tzlocal())
 
-    def display(self) -> str:
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "task": self.task,
+            "priority": str(self.priority),
+            "status": str(self.status),
+            "created_at": self.created_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "updated_at": self.updated_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }
+
+    def display(self) -> None:
         print(
             self.id,
             self.task,
             self.priority,
             self.status,
             self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            sep="  ",
+            sep=" | ",
         )
 
 
 @app.subcommand()
 def add(
+    task: str,
     *,
-    task: Annotated[str, clap.Short],
     priority: Annotated[Literal["low", "medium", "high"], clap.Short] = "low",
     status: Annotated[
         Literal["pending", "active", "completed"], clap.Short
@@ -221,7 +233,7 @@ def add(
     _display_field("Priority", new_task.priority)
     _display_field("Status", new_task.status)
     _display_field(
-        "Created at", new_task.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        "Created at", new_task.created_at.strftime("%Y-%m-%dT%H:%M:%S%z")
     )
 
 
@@ -231,11 +243,17 @@ def _display_field(key: str, value: object) -> None:
     )
 
 
+@app.subcommand()
+def get(*, id: int) -> None:
+    pass
+
+
 @app.subcommand(name="list")
-def list_(
+def _list(
     *,
     sort: Literal["id", "priority", "status", "created_at"] = "id",
     reverse: bool = False,
+    as_json: bool = False,
 ) -> None:
     cursor = connection.cursor()
     # NOTE: clap guarantees that `sort` is one of the valid options.
@@ -245,6 +263,15 @@ def list_(
         """
     )
     results = cursor.fetchall()
+
+    if as_json:
+        print(
+            json.dumps(
+                [Task(*result).as_dict() for result in results],
+                indent=2,
+            )
+        )
+        return
 
     id_width = len(str(len(results))) if len(results) > 9 else 2
 
@@ -274,8 +301,8 @@ def list_(
         ),
     )
 
-    created_at_width = 19 if len(results) > 0 else len("created at")
-    updated_at_width = 19 if len(results) > 0 else len("updated at")
+    created_at_width = 24 if len(results) > 0 else len("created at")
+    updated_at_width = 24 if len(results) > 0 else len("updated at")
 
     print(
         "┌",
@@ -334,8 +361,8 @@ def list_(
             task.task.ljust(task_width),
             str(task.priority).ljust(priority_width),
             str(task.status).ljust(status_width),
-            task.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            task.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            task.created_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            task.updated_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "",
             sep=" │ ",
         )
@@ -356,3 +383,20 @@ def list_(
         "┘",
         sep="─",
     )
+
+
+@app.subcommand()
+def delete(*, id: int) -> None:
+    cursor = connection.cursor()
+
+    # TODO: Fetch row before deleting it so we can display to the user what is
+    # being deleted.
+
+    cursor.execute(
+        """
+        DELETE FROM tasks WHERE id = ?;
+        """,
+        (id,),
+    )
+
+    print("💣", Colorize("Task removed successfully!").bold().green())
