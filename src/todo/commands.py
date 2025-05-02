@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime as dt
 import enum
 import json
@@ -49,6 +51,9 @@ cursor.execute(
     """
 )
 
+PriorityLiteral = Literal["low", "medium", "high"]
+StatusLiteral = Literal["pending", "active", "completed"]
+
 
 class Priority(enum.IntEnum):
     LOW = 0
@@ -56,7 +61,7 @@ class Priority(enum.IntEnum):
     HIGH = enum.auto()
 
     @classmethod
-    def from_int(cls, value: int, /) -> "Priority":
+    def from_int(cls, value: Literal[0, 1, 2], /) -> Priority:
         match value:
             case 0:
                 return cls.LOW
@@ -66,6 +71,24 @@ class Priority(enum.IntEnum):
                 return cls.HIGH
             case int():
                 raise ValueError("expected value between 0 and 2, inclusive")
+            case _:
+                raise TypeError(f"expected type int, got {type(value)}")
+
+        raise AssertionError("unreachable:", value)
+
+    @classmethod
+    def from_str(cls, value: PriorityLiteral, /) -> Priority:
+        match value:
+            case "low":
+                return cls.LOW
+            case "medium":
+                return cls.MEDIUM
+            case "high":
+                return cls.HIGH
+            case int():
+                raise ValueError(
+                    "expected value to be one of: low, medium, high"
+                )
             case _:
                 raise TypeError(f"expected type int, got {type(value)}")
 
@@ -89,7 +112,7 @@ class Status(enum.IntEnum):
     COMPLETED = enum.auto()
 
     @classmethod
-    def from_int(cls, value: int, /) -> "Priority":
+    def from_int(cls, value: Literal[0, 1, 2], /) -> Status:
         match value:
             case 0:
                 return cls.PENDING
@@ -101,6 +124,24 @@ class Status(enum.IntEnum):
                 raise ValueError("expected value between 0 and 2, inclusive")
             case _:
                 raise TypeError(f"expected type int, got {type(value)}")
+
+        raise AssertionError("unreachable:", value)
+
+    @classmethod
+    def from_str(cls, value: StatusLiteral, /) -> Status:
+        match value:
+            case "pending":
+                return cls.PENDING
+            case "active":
+                return cls.ACTIVE
+            case "completed":
+                return cls.COMPLETED
+            case str():
+                raise ValueError(
+                    "expected value to be one of: pending, active, completed"
+                )
+            case _:
+                raise TypeError(f"expected type str, got {type(value)}")
 
         raise AssertionError("unreachable:", value)
 
@@ -175,16 +216,6 @@ def add(
         Indicates the state of the task.
     """
     now = dt.datetime.now()
-    priority_mapping = {
-        "low": 0,
-        "medium": 1,
-        "high": 2,
-    }
-    status_mapping = {
-        "pending": 0,
-        "active": 1,
-        "completed": 2,
-    }
 
     # Add task to the database.
     cursor = connection.cursor()
@@ -195,8 +226,8 @@ def add(
         """,
         (
             task,
-            priority_mapping[priority],
-            status_mapping[status],
+            Priority.from_str(priority).value,
+            Status.from_str(status).value,
             now.timestamp(),
             now.timestamp(),
         ),
@@ -244,8 +275,17 @@ def _display_field(key: str, value: object) -> None:
 
 
 @app.subcommand()
-def get(*, id: int) -> None:
-    pass
+def get_task(id: int) -> None:
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        SELECT * FROM tasks WHERE id = ?;
+        """,
+        (id,),
+    )
+    result = cursor.fetchone()
+    task = Task(*result)
+    print(json.dumps(task.as_dict(), indent=2))
 
 
 @app.subcommand(name="list")
@@ -253,10 +293,15 @@ def _list(
     *,
     sort: Literal["id", "priority", "status", "created_at"] = "id",
     reverse: bool = False,
-    as_json: bool = False,
+    as_json: Annotated[bool, clap.Rename("json")] = False,
 ) -> None:
+    if sort == "priority":
+        # Priority should show HIGH at the top by default.
+        reverse = not reverse
+
     cursor = connection.cursor()
     # NOTE: clap guarantees that `sort` is one of the valid options.
+    # I also know I won't be trying anything malicious on my own project... :)
     cursor.execute(
         f"""
         SELECT * FROM tasks ORDER BY {sort} {"DESC" if reverse else ""};
@@ -386,7 +431,7 @@ def _list(
 
 
 @app.subcommand()
-def delete(*, id: int) -> None:
+def delete(id: int) -> None:
     cursor = connection.cursor()
 
     # TODO: Fetch row before deleting it so we can display to the user what is
@@ -400,3 +445,48 @@ def delete(*, id: int) -> None:
     )
 
     print("💣", Colorize("Task removed successfully!").bold().green())
+
+
+@app.subcommand()
+def edit(
+    id: int,
+    *,
+    task: Annotated[str | None, clap.Short] = None,
+    priority: Annotated[PriorityLiteral | None, clap.Short] = None,
+    status: Annotated[StatusLiteral | None, clap.Short] = None,
+) -> None:
+    fields = {
+        "task": task,
+        "priority": priority,
+        "status": status,
+    }
+
+    if all((field is None for field in fields.values())):
+        raise clap.UserError("nothing to edit. see --help for options")
+
+    changes = {}
+    for column, value in fields.items():
+        if value is None:
+            continue
+
+        changes[column] = value
+
+    expr = ", ".join(
+        [f"{column} = {value!r}" for column, value in changes.items()]
+    )
+
+    cursor = connection.cursor()
+
+    # TODO: Get task before editing to show a before and after to the user.
+
+    cursor.execute(
+        f"""
+        UPDATE tasks SET {expr} WHERE id = ?;
+        """,
+        (id,),
+    )
+
+
+@app.subcommand()
+def complete(id: int) -> None:
+    return edit(id, status="completed")
