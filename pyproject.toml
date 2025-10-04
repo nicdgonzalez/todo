@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "todo"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "python-dateutil>=2.9.0.post0",
+]
+
+[project.scripts]
+todo = "todo.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+line-length = 79
+
+[dependency-groups]
+dev = [
+    "isort>=6.0.1",
+    "mkdocs-material>=9.6.20",
+    "mkdocstrings-python>=1.18.2",
+    "mypy>=1.18.2",
+    "ruff>=0.13.2",
+    "types-python-dateutil>=2.9.0.20250822",
+]

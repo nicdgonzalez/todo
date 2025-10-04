@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+# Project Information
+site_name: Todo
+site_url: https://nicdgonzalez.github.io/todo
+
+# Configuration
+theme:
+  name: material
+  features:
+    # - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    # - content.code.select
+    # - content.footnote.tooltips
+    # - content.tabs.link
+    - content.tooltips
+    # - header.autohide
+    # - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    # - navigation.instant
+    # - navigation.instant.prefetch
+    # - navigation.instant.progress
+    - navigation.prune
+    - navigation.sections
+    - navigation.tabs
+    # - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+    # - toc.integrate
+docs_dir: docs
+watch:
+  - src
+
+# Plugins
+plugins:
+- autorefs
+- search
+- mkdocstrings:
+    default_handler: python
+    handlers:
+      python:
+        inventories:
+        - url: https://docs.python.org/3/objects.inv
+        paths: [src]
+        options:
+          docstring_style: numpy
+          show_source: true
+          show_symbol_type_heading: true
