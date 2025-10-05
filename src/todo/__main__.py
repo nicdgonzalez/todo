@@ -8,6 +8,7 @@ import os
 import pathlib
 import sqlite3
 import sys
+from importlib.metadata import metadata, packages_distributions, version
 from typing import Sequence
 
 from .args import setup_parser
@@ -65,8 +66,7 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> ExitCode:
 
     verbosity = Verbosity.from_args(args.verbose, args.quiet)
     handlers = [logging.StreamHandler(sys.stderr)]
-
-    pyproject_init()
+    assert all(map(lambda h: isinstance(h, logging.Handler), handlers))
 
     match verbosity:
         case Verbosity.SILENT:
@@ -74,8 +74,8 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> ExitCode:
         case Verbosity.DEFAULT:
             fallback = Verbosity.DEFAULT.to_level_name()
             assert fallback is not None
-            project_name = os.environ["PYPROJECT_NAME"]
-            directive = os.getenv(f"{project_name}_LOG", fallback)
+            assert __package__ is not None
+            directive = os.getenv(f"{__package__.upper()}_LOG", fallback)
 
             if (level := level_from_directive(directive)) is None:
                 logging.disable()
@@ -98,6 +98,9 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> ExitCode:
     connection = sqlite3.connect(database)
     ctx = Context(connection)
 
+    assert hasattr(args, "subcommand")
+    assert isinstance(args.subcommand, str), type(args.subcommand)
+    assert args.subcommand in subcommand_registry, subcommand_registry.keys()
     subcommand = subcommand_registry[args.subcommand]
     subcommand.from_args(args).run(ctx)
 
